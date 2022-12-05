@@ -5,8 +5,21 @@ import uuid
 import json
 import os
 
+# Proxy
+proxies={
+    'http':'http://127.0.0.1:7890/',
+    'https':'http://127.0.0.1:7890/'
+}
+
+
 def getUUID():
     return uuid.uuid1()
+
+def getParentDir(path=None, offset=-1):
+    result = path if path else __file__
+    for i in range(abs(offset)):
+        result = os.path.dirname(result)
+    return result
 
 def getCourseId(url):
     cutUrl = url.split('li=')
@@ -33,7 +46,7 @@ def loginAccount(username, password):
         'Content-Type': 'application/json'
     }
 
-    requestData = requests.post(url, data=data, headers=headers)
+    requestData = requests.post(url, data=data, headers=headers, proxies=proxies)
 
     if(requestData.status_code == 200):
         return requestData.text
@@ -54,7 +67,7 @@ def getHomeworkList(UserID, ServerSide):
         'ServerSide': ServerSide
     }
 
-    requestData = requests.get(url, cookies=cookies, headers=headers)
+    requestData = requests.get(url, cookies=cookies, headers=headers, proxies=proxies)
 
     if(requestData.status_code == 200):
         return requestData.text
@@ -75,7 +88,7 @@ def watchVideo(courseId, UserID, ServerSide, gradeId):
         'ServerSide': ServerSide
     }
 
-    videoSignData = requests.post(videoSignUrl, cookies=cookies, headers=headers)
+    videoSignData = requests.post(videoSignUrl, cookies=cookies, headers=headers, proxies=proxies)
 
     try:
         videoSignMsg = json.loads(videoSignData.text)
@@ -104,7 +117,7 @@ def doSkillTest(courseId, UserID, ServerSide, cityCode, schoolId, classroom, gra
         'ServerSide': ServerSide
     }
 
-    skillTestData = requests.get(testUrl, cookies=cookies, headers=headers)
+    skillTestData = requests.get(testUrl, cookies=cookies, headers=headers, proxies=proxies)
 
     try:
         skillTestMsg = json.loads(skillTestData.text)
@@ -137,7 +150,7 @@ def doSkillTest(courseId, UserID, ServerSide, cityCode, schoolId, classroom, gra
 
     data = '{"workId":' + str(skillTestWordId) + ',"fid":' + str(skillTestFid) + ',"testinfo":"已掌握技能","testanswer":"0|0|0","testMark":100,"testResult":1,"courseId":"' + str(courseId) + '","grade":' + str(grade) + ',"cityCode":' + str(cityCode) + ',"schoolId":' + str(schoolId) + ',"classroom":' + str(classroom) + '}'
 
-    requestData = requests.post(testSignUrl, data=data.encode('utf-8'), cookies=cookies, headers=headers)
+    requestData = requests.post(testSignUrl, data=data.encode('utf-8'), cookies=cookies, headers=headers, proxies=proxies)
 
     try:
         requestMsg = json.loads(requestData.text)
@@ -157,17 +170,24 @@ def doHomework(courseId, UserID, ServerSide, cityCode, schoolId, classroom, grad
     
     if(watchVideo(courseId, UserID, ServerSide, gradeId)):
         print('+ 已完成模块一 (视频)')
+        return True
     else:
         print('+ 未完成模块一 (视频)')
+        return False
 
     print('+ 正在自动完成模块二 (答题)...')
 
     if(doSkillTest(courseId, UserID, ServerSide, cityCode, schoolId, classroom, grade)):
         print('+ 已完成模块二 (答题)')
+        return True
     else:
         print('+ 未完成模块二 (答题)')
+        return False
 
 def doSpecialSign(specialId, UserID, ServerSide):
+
+    # TO-DO 通用 API 替换
+    # /Topic/topic/main/api/v1/
     url = 'https://huodongapi.xueanquan.com/p/zhejiang/Topic/topic/platformapi/api/v1/records/sign'
 
     for currentWork in range(1, 3):
@@ -185,7 +205,7 @@ def doSpecialSign(specialId, UserID, ServerSide):
 
         data = '{"specialId":' + specialId + ',"step":' + str(currentWork) + '}'
 
-        requestData = requests.post(url, data=data, headers=headers, cookies=cookies)
+        requestData = requests.post(url, data=data, headers=headers, cookies=cookies, proxies=proxies)
 
         try:
             specialSignMsg = json.loads(requestData.text)
@@ -200,27 +220,30 @@ def doSpecialSign(specialId, UserID, ServerSide):
             print('+ 已完成第 ' + str(currentWork) + ' 个模块，' + signMsg)
         else:
             print('! 不能完成第 ' + str(currentWork) + ' 个模块，' + signMsg)
-    return True
+
+def getspecialId(url):
+    parentUrl = getParentDir(url)
+    jsUrl = parentUrl + "/js/common.js"
+
+    requestData = requests.get(jsUrl, proxies=proxies)
+    requestText = requestData.text
+
+    releaseData = getSubStr(requestText, "release:{", "}")
+
+    return getSubStr(releaseData, "specialId: ", ",")
 
 def doSpecial(url, UserID, ServerSide):
     print('+ 正在自动完成专题活动...')
 
-    headers = {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-        'User-Agent': 'safetreeapp/1.8.7',
-    }
+    specialId = getspecialId(url)
 
-    requestData = requests.get(url, headers=headers)
-    specialId = getSubStr(getSubStr(requestData.text, 'data-specialId', 'data-schoolYear'), '"', '"')
+    print("* 活动 ID: " + specialId)
 
-    if(specialId == ''):
-        print("! 执行失败")
-        return False
-    else:
-        if(doSpecialSign(specialId, UserID, ServerSide)):
-            return True
-        else:
-            return False    
+    if(specialId == '' or specialId == '0'):
+        print("! 执行失败，活动不存在")
+        return
+    
+    doSpecialSign(specialId, UserID, ServerSide)
 
 def doWorkUtil(username, password):
     accountLogin = loginAccount(username, password)
@@ -300,7 +323,6 @@ def doWorkUtil(username, password):
                 print('! 未知错误')
         else:
             print('= 当前课程完成情况: ' + '未知')
-
         print('< 完成解析第 ' + str(currentWork + 1) + '/' + str(numOfWork) + ' 个任务 ===================\n')
 
 if __name__ == '__main__':
@@ -313,6 +335,8 @@ if __name__ == '__main__':
 
     configArray = configFileContent.split('\n')
     numOfAccount = len(configArray)
+
+    failWork = 0
 
     print('\n- 共 ' + str(numOfAccount) + ' 个账号')
 
