@@ -7,8 +7,8 @@ import os
 
 # Proxy
 proxies={
-    'http':'http://127.0.0.1:7890/',
-    'https':'http://127.0.0.1:7890/'
+    'http':None,
+    'https':None
 }
 
 
@@ -170,7 +170,6 @@ def doHomework(courseId, UserID, ServerSide, cityCode, schoolId, classroom, grad
     
     if(watchVideo(courseId, UserID, ServerSide, gradeId)):
         print('+ 已完成模块一 (视频)')
-        return True
     else:
         print('+ 未完成模块一 (视频)')
         return False
@@ -223,7 +222,7 @@ def doSpecialSign(specialId, UserID, ServerSide):
 
 def getspecialId(url):
     parentUrl = getParentDir(url)
-    jsUrl = parentUrl + "/js/common.js"
+    jsUrl = parentUrl + "/style/common.js"
 
     requestData = requests.get(jsUrl, proxies=proxies)
     requestText = requestData.text
@@ -245,6 +244,57 @@ def doSpecial(url, UserID, ServerSide):
     
     doSpecialSign(specialId, UserID, ServerSide)
 
+def doHolidaySign(specialId, UserID, ServerSide): 
+
+# TO-DO 通用 API 替换
+    # /Topic/topic/main/api/v1/
+    url = 'https://huodongapi.xueanquan.com/p/zhejiang/Topic/topic/platformapi/api/v1/holiday/sign'
+
+    for currentWork in range(1, 3):
+
+        headers = {
+            'Accept': 'application/json, text/plain, */*',
+            'User-Agent': 'safetreeapp/1.8.7',
+        }
+
+        cookies = {
+            'UserID': UserID,
+            'EquipmentId': str(getUUID()),
+            'ServerSide': ServerSide
+        }
+
+        # TO-DO
+        data = '{"schoolYear":2023,"semester":1,"specialId":' + specialId + ',"step":' + str(currentWork) + '}'
+
+        requestData = requests.post(url, data=data, headers=headers, cookies=cookies, proxies=proxies)
+
+        try:
+            specialSignMsg = json.loads(requestData.text)
+        except:
+            print('! 执行失败')
+            return False
+
+        isSignSeccuss = specialSignMsg ['result']
+        signMsg = specialSignMsg ['msg']
+
+        if(isSignSeccuss):
+            print('+ 已完成第 ' + str(currentWork) + ' 个模块，' + signMsg)
+        else:
+            print('! 不能完成第 ' + str(currentWork) + ' 个模块，' + signMsg)
+
+def doHolidaySpecial(url, UserID, ServerSide): 
+    print('+ 正在自动完成假期专题活动...')
+
+    specialId = getspecialId(url)
+
+    print("* 活动 ID: " + specialId)
+
+    if(specialId == '' or specialId == '0'):
+        print("! 执行失败，活动不存在")
+        return
+    
+    doHolidaySign(specialId, UserID, ServerSide)
+
 def doWorkUtil(username, password):
     accountLogin = loginAccount(username, password)
 
@@ -255,7 +305,7 @@ def doWorkUtil(username, password):
         accountMsg = json.loads(accountLogin)
     except:
         print('! 登录失败，返回信息有误')
-        exit()
+        return False
     
     accountData = accountMsg ['data']
 
@@ -268,11 +318,11 @@ def doWorkUtil(username, password):
         classroomId = accountData ['classroomId']
     except:
         print('! 登录失败，请检查账号信息是否有误')
-        exit()
+        return False
 
     if(grade == '' or cityId == '' or schoolId == '' or classroomId == ''):
         print('! 登录失败，请检查账号信息是否有误')
-        exit()
+        return False
 
     homeworkList = getHomeworkList(UserId, webUrl)
 
@@ -280,7 +330,7 @@ def doWorkUtil(username, password):
         workListData = json.loads(homeworkList)
     except:
         print('! 登录失败，返回信息有误')
-        exit()
+        return False
 
     print('- 正在解析任务列表...')
 
@@ -304,8 +354,10 @@ def doWorkUtil(username, password):
             print('= 当前课程类型: ' + '普通课程')
         elif(currentWorkType == 'Special'):
             print('= 当前课程类型: ' + '专题活动')
+        elif(currentWorkType == 'SummerWinterHoliday'):
+            print('= 当前课程类型: ' + '寒暑假专题')
         else:
-            print('= 当前课程类型: ' + '未知')
+            print('= 当前课程类型: ' + '未知 (' + currentWorkType + ')')
 
         if(workStatus == 'Finished'):
             print('= 当前课程完成情况: ' + '已完成')
@@ -319,6 +371,9 @@ def doWorkUtil(username, password):
             elif(currentWorkType == 'Special'):
                 specialUrl = str(currentWorkUrl).replace('index', 'jiating')
                 doSpecial(specialUrl, UserId, webUrl)
+            elif(currentWorkType == 'SummerWinterHoliday'):
+                holidayUrl = str(currentWorkUrl).replace('index', 'shipin')
+                doHolidaySpecial(holidayUrl, UserId, webUrl)
             else:
                 print('! 未知错误')
         else:
