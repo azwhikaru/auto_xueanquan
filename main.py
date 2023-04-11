@@ -21,9 +21,11 @@ def getParentDir(path=None, offset=-1):
         result = os.path.dirname(result)
     return result
 
+# 临时修复，等待新 API
 def getCourseId(url):
     cutUrl = url.split('li=')
-    return cutUrl[1]
+    cutUrl = cutUrl[1].split('&')
+    return cutUrl[0]
 
 def getSubStr(s, start_str, stop_str):
     start_pos = s.find(start_str)
